@@ -41,6 +41,7 @@ const Drafts = () => {
       toast.success('Draft deleted successfully!');
     } catch (error) {
       console.error('Error deleting draft:', error);
+      toast.error('Failed to delete draft');
     }
   };
 
@@ -131,46 +132,52 @@ const Drafts = () => {
     );
   };
 
-  const DeleteConfirmation = ({ draft }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Delete Draft
-        </h3>
-        <p className="text-gray-600 mb-6">
-          Are you sure you want to delete draft "{draft.orderNumber}"? This action cannot be undone.
-        </p>
-        
-        <div className="flex items-center space-x-2 mb-4">
-          <input
-            type="checkbox"
-            id="confirmDelete"
-            className="rounded border-gray-300"
-          />
-          <label htmlFor="confirmDelete" className="text-sm text-gray-700">
-            I understand this action cannot be undone
-          </label>
-        </div>
+  const DeleteConfirmation = ({ draft }) => {
+    const [isConfirmed, setIsConfirmed] = useState(false);
 
-        <div className="flex space-x-2">
-          <button
-            onClick={() => handleDeleteDraft(draft.id)}
-            disabled={!document.getElementById('confirmDelete')?.checked}
-            className="btn btn-danger flex-1"
-          >
-            <Trash2 size={16} className="mr-2" />
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Delete Draft
-          </button>
-          <button
-            onClick={() => setDeleteConfirm(null)}
-            className="btn btn-secondary flex-1"
-          >
-            Cancel
-          </button>
+          </h3>
+          <p className="text-gray-600 mb-6">
+            Are you sure you want to delete draft "{draft.orderNumber}"? This action cannot be undone.
+          </p>
+          
+          <div className="flex items-center space-x-2 mb-4">
+            <input
+              type="checkbox"
+              id="confirmDelete"
+              checked={isConfirmed}
+              onChange={(e) => setIsConfirmed(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            <label htmlFor="confirmDelete" className="text-sm text-gray-700">
+              I understand this action cannot be undone
+            </label>
+          </div>
+
+          <div className="flex space-x-2">
+            <button
+              onClick={() => handleDeleteDraft(draft.id)}
+              disabled={!isConfirmed}
+              className="btn btn-danger flex-1 disabled:opacity-50"
+            >
+              <Trash2 size={16} className="mr-2" />
+              Delete Draft
+            </button>
+            <button
+              onClick={() => setDeleteConfirm(null)}
+              className="btn btn-secondary flex-1"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="p-6">

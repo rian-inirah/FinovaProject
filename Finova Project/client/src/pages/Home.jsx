@@ -4,7 +4,6 @@ import {
   Plus, 
   Package, 
   ShoppingCart, 
-  FileText, 
   BarChart3, 
   TrendingUp,
   Receipt,
@@ -50,14 +49,14 @@ const Home = () => {
     {
       name: 'Order Reports',
       description: 'View sales and order analytics',
-      href: '/reports/orders',
+      href: '/reports-pin/order',
       icon: BarChart3,
       color: 'bg-black hover:bg-gray-800',
     },
     {
       name: 'Item Reports',
       description: 'Analyze item-wise sales',
-      href: '/reports/items',
+      href: '/reports-pin/item',
       icon: TrendingUp,
       color: 'bg-gray-800 hover:bg-gray-700',
     },
@@ -144,51 +143,6 @@ const Home = () => {
             >
               Go to Business Details →
             </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* Features Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card">
-          <div className="card-content">
-            <div className="flex items-center space-x-3 mb-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Receipt className="w-5 h-5 text-blue-600" />
-              </div>
-              <h3 className="font-semibold text-gray-900">Easy Billing</h3>
-            </div>
-            <p className="text-sm text-gray-600">
-              Create and print professional bills with GST calculation and thermal printer support.
-            </p>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-content">
-            <div className="flex items-center space-x-3 mb-3">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <BarChart3 className="w-5 h-5 text-green-600" />
-              </div>
-              <h3 className="font-semibold text-gray-900">Smart Reports</h3>
-            </div>
-            <p className="text-sm text-gray-600">
-              Get detailed analytics on sales, items, and payments with PIN-protected access.
-            </p>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-content">
-            <div className="flex items-center space-x-3 mb-3">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Package className="w-5 h-5 text-purple-600" />
-              </div>
-              <h3 className="font-semibold text-gray-900">Item Management</h3>
-            </div>
-            <p className="text-sm text-gray-600">
-              Manage your menu items with images, prices, and easy search functionality.
-            </p>
           </div>
         </div>
       </div>

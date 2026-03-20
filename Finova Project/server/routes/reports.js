@@ -1,6 +1,5 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
-const { verifyReportsPin } = require('../middleware/pinAuth');
 const {
   getOrderReports,
   getItemReports,
@@ -13,10 +12,10 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticateToken);
 
-// Routes (PIN protected)
-router.get('/orders', verifyReportsPin, getOrderReports);
-router.get('/items', verifyReportsPin, getItemReports);
-router.get('/daily', verifyReportsPin, getDailyReports);
-router.get('/top-items', verifyReportsPin, getTopSellingItems);
+// Reports routes (frontend handles PIN)
+router.get('/orders', getOrderReports);
+router.get('/items', getItemReports);
+router.get('/daily', getDailyReports);
+router.get('/top-items', getTopSellingItems);
 
 module.exports = router;

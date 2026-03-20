@@ -1,277 +1,229 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  Printer, 
-  Download, 
-  Share2, 
-  Mail, 
-  MessageCircle,
-  ArrowLeft,
-  CheckCircle
-} from 'lucide-react';
-import { billingAPI } from '../services/api';
+import { ordersAPI, businessAPI } from '../services/api';
+import { Printer, ArrowLeft, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
+import './PrintPreview.css';
 
 const PrintPreview = () => {
-  const { id } = useParams();
+  const { orderId } = useParams();
   const navigate = useNavigate();
-  const [billData, setBillData] = useState(null);
+
+  const [order, setOrder] = useState(null);
+  const [businessDetails, setBusinessDetails] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isPrinting, setIsPrinting] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
 
   useEffect(() => {
-    fetchBillPreview();
-  }, [id]);
+    fetchOrder();
+    fetchBusinessDetails();
+  }, [orderId]);
 
-  const fetchBillPreview = async () => {
+  const fetchOrder = async () => {
     try {
-      setIsLoading(true);
-      const response = await billingAPI.getPreview(id);
-      setBillData(response.data);
+      const response = await ordersAPI.getById(orderId);
+      setOrder(response.data.order);
     } catch (error) {
-      console.error('Error fetching bill preview:', error);
-      toast.error('Failed to load bill preview');
+      console.error('Error fetching order:', error);
+      toast.error('Failed to load order');
       navigate('/');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handlePrint = () => {
-    setIsPrinting(true);
-    
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(billData.html);
-    printWindow.document.close();
-    
-    // Wait for content to load, then print
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-      setIsPrinting(false);
-      
-      // Mark as printed on server
-      billingAPI.print(id)
-        .then(() => {
-          toast.success('Bill printed successfully!');
-        })
-        .catch((error) => {
-          console.error('Error marking as printed:', error);
+  const fetchBusinessDetails = async () => {
+    try {
+      const response = await businessAPI.getDetails();
+      setBusinessDetails(response.data.businessDetails);
+    } catch (error) {
+      console.error('Error fetching business details:', error);
+      toast.error('Failed to load business details');
+    }
+  };
+
+  const handlePrint = () => window.print();
+
+  const handleDownloadPDF = () => {
+    import('jspdf').then(jsPDFModule => {
+      const jsPDF = jsPDFModule.default;
+      const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+      let y = 10;
+
+      // Logo (base64 or URL)
+      if (businessDetails?.businessLogo) {
+        const img = new Image();
+        img.src = businessDetails.businessLogo.startsWith('http')
+          ? businessDetails.businessLogo
+          : `${process.env.REACT_APP_API_URL}/uploads/${businessDetails.businessLogo}`;
+        img.onload = () => {
+          doc.addImage(img, 'PNG', 80, y, 50, 50);
+          y += 55;
+          addBillDetails(doc, y);
+        };
+      } else {
+        addBillDetails(doc, y);
+      }
+
+      function addBillDetails(doc, yStart) {
+        let y = yStart;
+
+        // Company Name
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.text(businessDetails?.businessName || 'Company Name', 105, y, { align: 'center' });
+        y += 8;
+
+        // Company Info
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        if (businessDetails) {
+          const lines = [
+            businessDetails.businessAddress || '',
+            `Contact: ${businessDetails.phoneNumber || 'N/A'}`,
+            `GSTIN: ${businessDetails.gstinNumber || 'N/A'}`,
+            businessDetails.fssaiNumber ? `FSSAI: ${businessDetails.fssaiNumber}` : null
+          ].filter(Boolean);
+
+          lines.forEach(line => {
+            doc.text(line, 105, y, { align: 'center' });
+            y += 5;
+          });
+          y += 5;
+        }
+
+        // Order Info
+        doc.text(`Order ID: ${order.id}`, 10, y);
+        y += 6;
+        doc.text(`Customer: ${order.customerPhone || 'N/A'}`, 10, y);
+        y += 6;
+        doc.text(`Payment: ${order.paymentMethod || 'N/A'}`, 10, y);
+        y += 8;
+
+        // Items
+        order.orderItems.forEach(item => {
+          const price = Number(item.item.price || 0);
+          doc.text(`${item.item.name} x${item.quantity} - ₹${(price * item.quantity).toFixed(2)}`, 10, y);
+          y += 6;
         });
-    }, 500);
+        y += 6;
+
+        // Totals
+        const subtotal = order.orderItems.reduce(
+          (sum, item) => sum + Number(item.item.price || 0) * item.quantity,
+          0
+        );
+        const gstRate = Number(businessDetails?.gstSlab || 0);
+        const gstAmount = (subtotal * gstRate) / 100;
+        const total = subtotal + gstAmount;
+
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, 10, y);
+        y += 6;
+        doc.text(`GST (${gstRate}%): ₹${gstAmount.toFixed(2)}`, 10, y);
+        y += 6;
+        doc.text(`Grand Total: ₹${total.toFixed(2)}`, 10, y);
+
+        doc.save(`bill_${order.id}.pdf`);
+      }
+    });
   };
 
-  const handleDownloadPDF = async () => {
-    try {
-      setIsSharing(true);
-      const response = await billingAPI.getPDF(id);
-      
-      // Create blob and download
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `bill-${billData.order.orderNumber}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      toast.success('PDF downloaded successfully!');
-    } catch (error) {
-      console.error('Error downloading PDF:', error);
-      toast.error('Failed to download PDF');
-    } finally {
-      setIsSharing(false);
-    }
-  };
+  if (isLoading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  if (!order) return null;
 
-  const handleEmailShare = async () => {
-    const email = prompt('Enter email address to send the bill:');
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.error('Please enter a valid email address');
-      return;
-    }
-
-    try {
-      setIsSharing(true);
-      await billingAPI.shareEmail(id, email);
-      toast.success('Bill sent via email successfully!');
-    } catch (error) {
-      console.error('Error sending email:', error);
-      toast.error('Failed to send email');
-    } finally {
-      setIsSharing(false);
-    }
-  };
-
-  const handleWhatsAppShare = async () => {
-    try {
-      setIsSharing(true);
-      const response = await billingAPI.getWhatsAppLink(id);
-      window.open(response.data.whatsappLink, '_blank');
-    } catch (error) {
-      console.error('Error getting WhatsApp link:', error);
-      toast.error('Failed to open WhatsApp');
-    } finally {
-      setIsSharing(false);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="spinner w-8 h-8"></div>
-      </div>
-    );
-  }
-
-  if (!billData) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Bill not found</h2>
-          <button
-            onClick={() => navigate('/')}
-            className="btn btn-primary"
-          >
-            Go Home
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const subtotal = order.orderItems.reduce(
+    (sum, item) => sum + Number(item.item.price || 0) * item.quantity,
+    0
+  );
+  const gstRate = Number(businessDetails?.gstSlab || 0);
+  const gstAmount = (subtotal * gstRate) / 100;
+  const total = subtotal + gstAmount;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center space-x-4 mb-4">
-          <button
-            onClick={() => navigate('/')}
-            className="btn btn-secondary"
-          >
-            <ArrowLeft size={16} className="mr-2" />
-            Back
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-              <Printer className="mr-2" size={24} />
-              Print Bill - {billData.order.orderNumber}
-            </h1>
-            <p className="text-gray-600 mt-1">
-              Preview and print your bill
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="mb-6 flex flex-wrap gap-3">
-        <button
-          onClick={handlePrint}
-          disabled={isPrinting}
-          className="btn btn-primary"
-        >
-          {isPrinting ? (
-            <div className="spinner w-4 h-4 mr-2"></div>
-          ) : (
-            <Printer size={16} className="mr-2" />
-          )}
-          Print Bill
-        </button>
-
-        <button
-          onClick={handleDownloadPDF}
-          disabled={isSharing}
-          className="btn btn-secondary"
-        >
-          <Download size={16} className="mr-2" />
-          Download PDF
-        </button>
-
-        <button
-          onClick={handleEmailShare}
-          disabled={isSharing}
-          className="btn btn-secondary"
-        >
-          <Mail size={16} className="mr-2" />
-          Email Bill
-        </button>
-
-        <button
-          onClick={handleWhatsAppShare}
-          disabled={isSharing}
-          className="btn btn-secondary"
-        >
-          <MessageCircle size={16} className="mr-2" />
-          WhatsApp
+    <div className="print-wrapper">
+      <div className="no-print flex items-center mb-6">
+        <button onClick={() => navigate(-1)} className="btn btn-secondary mr-4">
+          <ArrowLeft size={16} className="mr-2" /> Back
         </button>
       </div>
 
-      {/* Bill Preview */}
-      <div className="card">
-        <div className="card-content">
-          <div className="text-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Bill Preview</h3>
-            <p className="text-sm text-gray-600">
-              This is how your bill will appear when printed
-            </p>
-          </div>
+      <div className="bill-container">
+        {businessDetails?.businessLogo && (
+          <img
+            src={
+              businessDetails.businessLogo.startsWith('http')
+                ? businessDetails.businessLogo
+                : `${process.env.REACT_APP_API_URL}/uploads/${businessDetails.businessLogo}`
+            }
+            alt="Business Logo"
+            className="mx-auto mb-2 w-24 h-24 object-contain"
+          />
+        )}
 
-          {/* Thermal Print Preview */}
-          <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-4 mx-auto" style={{ maxWidth: '232px' }}>
-            <div 
-              className="thermal-print thermal-print-58mm"
-              dangerouslySetInnerHTML={{ __html: billData.html }}
-            />
-          </div>
+        <h2 className="company-name">{businessDetails?.businessName || 'Company Name'}</h2>
+        <p className="company-info">
+          {businessDetails?.businessAddress || 'Business Address'} <br />
+          Contact: {businessDetails?.phoneNumber || 'N/A'} <br />
+          GSTIN: {businessDetails?.gstinNumber || 'N/A'} <br />
+          {businessDetails?.fssaiNumber && <>FSSAI: {businessDetails?.fssaiNumber}</>}
+        </p>
 
-          {/* Print Instructions */}
-          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h4 className="font-semibold text-blue-900 mb-2">Print Instructions:</h4>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li>• Make sure your thermal printer is connected and ready</li>
-              <li>• Use 58mm or 80mm thermal paper</li>
-              <li>• Adjust printer settings for optimal quality</li>
-              <li>• The bill is optimized for mobile thermal printers</li>
-            </ul>
-          </div>
+    <div className="bill-meta grid grid-cols-2 gap-4 my-4">
+  {/* Left side */}
+  <div>
+    <p><strong>Order ID:</strong> {order.id}</p>
+    <p><strong>Date:</strong> {new Date(order.createdAt).toLocaleDateString()}</p>
+    <p><strong>Time:</strong> {new Date(order.createdAt).toLocaleTimeString()}</p>
+  </div>
+
+  {/* Right side */}
+  <div className="text-right">
+    <p><strong>Customer Ph.no:</strong> {order.customerPhone || 'N/A'}</p>
+    <p><strong>Payment:</strong> {order.paymentMethod || 'N/A'}</p>
+  </div>
+</div>
+
+
+
+        <table className="bill-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Qty</th>
+              <th>Rate (₹)</th>
+              <th>Total (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {order.orderItems.map(item => {
+              const price = Number(item.item.price || 0);
+              return (
+                <tr key={item.itemId}>
+                  <td>{item.item.name}</td>
+                  <td>{item.quantity}</td>
+                  <td>₹{price.toFixed(2)}</td>
+                  <td>₹{(price * item.quantity).toFixed(2)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <div className="bill-summary">
+          <p>Subtotal: ₹{subtotal.toFixed(2)}</p>
+          <p>GST ({gstRate}%): ₹{gstAmount.toFixed(2)}</p>
+          <h3>Grand Total: ₹{total.toFixed(2)}</h3>
         </div>
+
+        <p className="thank-you">Thank You! Visit Again.</p>
+        <p className="footer">Finova — By Smart Stack Technologies</p>
       </div>
 
-      {/* Bill Details Summary */}
-      <div className="mt-6 card">
-        <div className="card-header">
-          <h3 className="text-lg font-semibold">Bill Summary</h3>
-        </div>
-        <div className="card-content">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-gray-600">Order Number</p>
-              <p className="font-semibold">{billData.order.orderNumber}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Date & Time</p>
-              <p className="font-semibold">
-                {new Date(billData.order.createdAt).toLocaleDateString()} {' '}
-                {new Date(billData.order.createdAt).toLocaleTimeString()}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Payment Method</p>
-              <p className="font-semibold capitalize">{billData.order.paymentMethod}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Total Amount</p>
-              <p className="font-semibold text-green-600">
-                ₹{parseFloat(billData.order.grandTotal).toFixed(2)}
-              </p>
-            </div>
-          </div>
-        </div>
+      <div className="no-print flex space-x-4 mt-6">
+        <button onClick={handlePrint} className="btn btn-primary flex items-center">
+          <Printer size={16} className="mr-2" /> Print
+        </button>
+        
       </div>
     </div>
   );

@@ -4,11 +4,19 @@ import Navbar from './Navbar';
 
 const Layout = () => {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen flex flex-col bg-white">
+      {/* Navbar */}
       <Navbar />
-      <main className="pb-20">
-        <Outlet />
+
+      {/* Main content */}
+      <main className="flex-1 p-6 pb-20">
+        <Outlet /> {/* Nested routes render here */}
       </main>
+
+      {/* Optional footer */}
+      <footer className="bg-gray-100 text-center p-4 text-sm">
+        &copy; Finova by SmartStack Technologies
+      </footer>
     </div>
   );
 };

@@ -1,6 +1,5 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
-const { verifyReportsPin } = require('../middleware/pinAuth');
 const {
   getPSGReports,
   getPSGOrderHistory,
@@ -12,9 +11,9 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticateToken);
 
-// Routes (PIN protected)
-router.get('/reports', verifyReportsPin, getPSGReports);
-router.get('/orders', verifyReportsPin, getPSGOrderHistory);
-router.get('/items/:itemId', verifyReportsPin, getPSGItemDetails);
+// PSG routes — frontend handles PIN
+router.get('/reports', getPSGReports);
+router.get('/orders', getPSGOrderHistory);
+router.get('/items/:itemId', getPSGItemDetails);
 
 module.exports = router;

@@ -1,68 +1,67 @@
+// models/BusinessDetails.js
 module.exports = (sequelize, DataTypes) => {
   const BusinessDetails = sequelize.define('BusinessDetails', {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true
+    id: { 
+      type: DataTypes.INTEGER, 
+      primaryKey: true, 
+      autoIncrement: true 
     },
-    userId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id'
-      }
+
+    userId: { 
+      type: DataTypes.INTEGER, 
+      allowNull: false 
     },
-    businessCategory: {
-      type: DataTypes.STRING(100),
-      allowNull: true
+
+    businessName: { 
+      type: DataTypes.STRING, 
+      allowNull: false 
     },
-    fssaiNumber: {
-      type: DataTypes.STRING(20),
-      allowNull: true
+
+    businessCategory: { 
+      type: DataTypes.STRING, 
+      allowNull: true 
     },
-    businessName: {
-      type: DataTypes.STRING(200),
+
+    businessAddress: { 
+      type: DataTypes.TEXT, 
+      allowNull: true 
+    },
+
+    phoneNumber: { 
+      type: DataTypes.STRING, 
+      allowNull: true 
+    },
+
+    gstinNumber: { 
+      type: DataTypes.STRING, 
+      allowNull: true 
+    },
+
+    gstSlab: { 
+      type: DataTypes.STRING, 
+      allowNull: true 
+    },
+
+    gstPercentage: { 
+      type: DataTypes.FLOAT, 
+      allowNull: true 
+    },
+
+    fssaiNumber: { 
+      type: DataTypes.STRING, 
+      allowNull: true 
+    },
+
+    businessLogo: { 
+      type: DataTypes.STRING, 
+      allowNull: true 
+    },
+
+    // --- Reports PIN (Generated when business details are created) ---
+    reportsPin: { 
+      type: DataTypes.STRING, 
       allowNull: true,
-      validate: {
-        len: [0, 200]
-      }
-    },
-    phoneNumber: {
-      type: DataTypes.STRING(15),
-      allowNull: true
-    },
-    businessAddress: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    gstinNumber: {
-      type: DataTypes.STRING(15),
-      allowNull: true
-    },
-    gstSlab: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      validate: {
-        min: 0,
-        max: 28
-      }
-    },
-    gstPercentage: {
-      type: DataTypes.DECIMAL(5, 2),
-      allowNull: true,
-      validate: {
-        min: 0,
-        max: 100
-      }
-    },
-    businessLogo: {
-      type: DataTypes.STRING(500),
-      allowNull: true
-    },
-    reportsPinHash: {
-      type: DataTypes.STRING(255),
-      allowNull: true
+      comment: '4-digit PIN used for accessing the Reports section'
     }
   }, {
     tableName: 'business_details',
@@ -70,10 +69,7 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   BusinessDetails.associate = (models) => {
-    BusinessDetails.belongsTo(models.User, {
-      foreignKey: 'userId',
-      as: 'user'
-    });
+    BusinessDetails.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
   };
 
   return BusinessDetails;

@@ -55,16 +55,16 @@ export const AuthProvider = ({ children }) => {
 
       if (token && userData) {
         try {
-          // Verify token with server
-          const response = await authAPI.verifyToken();
+          // Verify token with backend
+          const response = await authAPI.verifyToken(token); // pass token
           const user = JSON.parse(userData);
-          
+
           dispatch({
             type: 'LOGIN_SUCCESS',
             payload: { user, token },
           });
         } catch (error) {
-          // Token is invalid, clear localStorage
+          // Token invalid or expired
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           dispatch({ type: 'LOGOUT' });
@@ -80,7 +80,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
-      
+
       const response = await authAPI.login(credentials);
       const { token, user } = response.data;
 
@@ -97,6 +97,7 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       dispatch({ type: 'SET_LOADING', payload: false });
+      toast.error(error.response?.data?.error || 'Login failed');
       return { success: false, error: error.response?.data?.error || 'Login failed' };
     }
   };
@@ -115,7 +116,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const isPSGVisible = () => {
-    return state.user?.username === 'Modern';
+    return state.user?.username.toLowerCase() === 'modern';
   };
 
   const value = {
@@ -126,11 +127,7 @@ export const AuthProvider = ({ children }) => {
     isPSGVisible,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

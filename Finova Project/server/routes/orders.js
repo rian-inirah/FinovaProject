@@ -1,4 +1,5 @@
 const express = require('express');
+const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
 const {
   createOrder,
@@ -10,17 +11,25 @@ const {
   orderValidation
 } = require('../controllers/orderController');
 
-const router = express.Router();
-
-// All routes require authentication
+// ✅ All routes require authentication
 router.use(authenticateToken);
 
-// Routes
+// ✅ Create new order
 router.post('/', orderValidation, createOrder);
+
+// ✅ Get all orders belonging to logged-in user
 router.get('/', getOrders);
+
+// ✅ Get single order by ID (only user’s own)
 router.get('/:id', getOrderById);
+
+// ✅ Update existing order
 router.put('/:id', orderValidation, updateOrder);
+
+// ✅ Delete draft order (only user’s own)
 router.delete('/:id', deleteOrder);
-router.post('/:id/print', markOrderPrinted);
+
+// ✅ Mark order as printed (only user’s own)
+router.patch('/:id/printed', markOrderPrinted);
 
 module.exports = router;

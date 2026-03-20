@@ -1,211 +1,86 @@
-const { body, validationResult } = require('express-validator');
-const db = require('../models');
+const { Item } = require("../models");
+const { Op } = require("sequelize");
 
-const itemValidation = [
-  body('name')
-    .trim()
-    .isLength({ min: 1, max: 200 })
-    .withMessage('Item name must be between 1 and 200 characters'),
-  body('price')
-    .isFloat({ min: 0 })
-    .withMessage('Price must be a positive number')
-];
-
-const getAllItems = async (req, res) => {
+// GET all items for the logged-in user
+exports.getAllItems = async (req, res) => {
   try {
-    const { search } = req.query;
-    
-    const whereClause = {
-      userId: req.user.id,
-      isActive: true
-    };
+    const search = req.query.search || "";
 
-    if (search) {
-      whereClause.name = {
-        [db.Sequelize.Op.iLike]: `%${search}%`
-      };
-    }
-
-    const items = await db.Item.findAll({
-      where: whereClause,
-      order: [['name', 'ASC']],
-      attributes: ['id', 'name', 'price', 'image', 'createdAt']
+    const items = await Item.findAll({
+      where: {
+        userId: req.user.id,
+        name: { [Op.like]: `%${search}%` }, // MySQL-compatible search
+        isActive: true,                     // only active items
+      },
+      order: [["createdAt", "DESC"]],
     });
 
     res.json({ items });
-  } catch (error) {
-    console.error('Get items error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (err) {
+    console.error("getAllItems error:", err);
+    res.status(500).json({ error: "Failed to fetch items" });
   }
 };
 
-const getItemById = async (req, res) => {
+// CREATE a new item
+exports.createItem = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const item = await db.Item.findOne({
-      where: {
-        id: id,
-        userId: req.user.id,
-        isActive: true
-      },
-      attributes: ['id', 'name', 'price', 'image', 'createdAt']
-    });
-
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-
-    res.json({ item });
-  } catch (error) {
-    console.error('Get item by ID error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-const createItem = async (req, res) => {
-  try {
-    // Check validation errors
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        error: 'Validation failed', 
-        details: errors.array() 
-      });
-    }
-
     const { name, price } = req.body;
+    const image = req.file ? req.file.path : null;
 
-    // Handle file upload
-    let image = null;
-    if (req.file) {
-      image = `/uploads/${req.file.filename}`;
+    if (!name || !price) {
+      return res.status(400).json({ error: "Name and price are required" });
     }
 
-    const itemData = {
+    const item = await Item.create({
       userId: req.user.id,
-      name: name.trim(),
-      price: parseFloat(price),
-      image: image
-    };
-
-    const item = await db.Item.create(itemData);
-
-    res.status(201).json({
-      message: 'Item created successfully',
-      item: {
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        image: item.image,
-        createdAt: item.createdAt
-      }
+      name,
+      price,
+      image,
+      isActive: true,
     });
 
-  } catch (error) {
-    console.error('Create item error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(201).json({ item });
+  } catch (err) {
+    console.error("createItem error:", err);
+    res.status(500).json({ error: "Failed to create item" });
   }
 };
 
-const updateItem = async (req, res) => {
+// UPDATE an existing item
+exports.updateItem = async (req, res) => {
   try {
-    // Check validation errors
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        error: 'Validation failed', 
-        details: errors.array() 
-      });
-    }
+    const item = await Item.findOne({
+      where: { id: req.params.id, userId: req.user.id },
+    });
 
-    const { id } = req.params;
+    if (!item) return res.status(404).json({ error: "Item not found" });
+
     const { name, price } = req.body;
+    const image = req.file ? req.file.path : item.image;
 
-    // Find the item
-    const item = await db.Item.findOne({
-      where: {
-        id: id,
-        userId: req.user.id,
-        isActive: true
-      }
-    });
-
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-
-    const updateData = {
-      name: name.trim(),
-      price: parseFloat(price)
-    };
-
-    // Handle file upload (only if new image is provided)
-    if (req.file) {
-      updateData.image = `/uploads/${req.file.filename}`;
-    }
-
-    await item.update(updateData);
-
-    res.json({
-      message: 'Item updated successfully',
-      item: {
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        image: item.image,
-        createdAt: item.createdAt
-      }
-    });
-
-  } catch (error) {
-    console.error('Update item error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    await item.update({ name, price, image });
+    res.json({ item });
+  } catch (err) {
+    console.error("updateItem error:", err);
+    res.status(500).json({ error: "Failed to update item" });
   }
 };
 
-const deleteItem = async (req, res) => {
+// DELETE an item (soft delete)
+exports.deleteItem = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { confirm } = req.body;
-
-    if (!confirm) {
-      return res.status(400).json({ 
-        error: 'Deletion confirmation required' 
-      });
-    }
-
-    // Find the item
-    const item = await db.Item.findOne({
-      where: {
-        id: id,
-        userId: req.user.id,
-        isActive: true
-      }
+    const item = await Item.findOne({
+      where: { id: req.params.id, userId: req.user.id },
     });
 
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
+    if (!item) return res.status(404).json({ error: "Item not found" });
 
-    // Soft delete
+    // Soft delete: mark item as inactive instead of destroying
     await item.update({ isActive: false });
-
-    res.json({
-      message: 'Item deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('Delete item error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.json({ message: "Item deleted successfully" });
+  } catch (err) {
+    console.error("deleteItem error:", err);
+    res.status(500).json({ error: "Failed to delete item" });
   }
-};
-
-module.exports = {
-  getAllItems,
-  getItemById,
-  createItem,
-  updateItem,
-  deleteItem,
-  itemValidation
 };

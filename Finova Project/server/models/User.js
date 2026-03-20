@@ -36,8 +36,17 @@ module.exports = (sequelize, DataTypes) => {
     timestamps: true,
     paranoid: true, // Soft delete
     hooks: {
-      beforeCreate: (user) => {
-        // Password will be hashed in the controller before saving
+      beforeCreate: async (user) => {
+        if (user.password) {
+          const bcrypt = require('bcryptjs');
+          user.password = await bcrypt.hash(user.password, 10);
+        }
+      },
+      beforeUpdate: async (user) => {
+        if (user.changed('password')) {
+          const bcrypt = require('bcryptjs');
+          user.password = await bcrypt.hash(user.password, 10);
+        }
       }
     }
   });
@@ -47,12 +56,12 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'userId',
       as: 'businessDetails'
     });
-    
+
     User.hasMany(models.Item, {
       foreignKey: 'userId',
       as: 'items'
     });
-    
+
     User.hasMany(models.Order, {
       foreignKey: 'userId',
       as: 'orders'

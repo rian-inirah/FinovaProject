@@ -1,3 +1,4 @@
+// src/components/Navbar.jsx
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
@@ -6,7 +7,7 @@ import {
   Package, 
   ShoppingCart, 
   FileText, 
-  BarChart3, 
+  BarChart3,
   TrendingUp,
   LogOut,
   Menu,
@@ -19,17 +20,20 @@ const Navbar = () => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Navigation links
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
     { name: 'Business Details', href: '/business-details', icon: Settings },
     { name: 'Items', href: '/items', icon: Package },
     { name: 'Add Order', href: '/add-order', icon: ShoppingCart },
     { name: 'Draft Bills', href: '/drafts', icon: FileText },
-    { name: 'Order Reports', href: '/reports/orders', icon: BarChart3 },
-    { name: 'Item Reports', href: '/reports/items', icon: TrendingUp },
+
+    // Reports & Analytics with PIN protection
+    { name: 'Order Reports', href: '/reports-pin/order', icon: BarChart3 },
+    { name: 'Item Reports', href: '/reports-pin/item', icon: TrendingUp },
   ];
 
-  // Add PSG navigation only for Modern user
+  // Add PSG dynamically if visible
   if (isPSGVisible()) {
     navigation.push({ name: 'PSG', href: '/psg', icon: TrendingUp });
   }
@@ -39,15 +43,13 @@ const Navbar = () => {
   };
 
   const isActive = (href) => {
-    if (href === '/') {
-      return location.pathname === '/';
-    }
+    if (href === '/') return location.pathname === '/';
     return location.pathname.startsWith(href);
   };
 
   return (
     <>
-      {/* Mobile menu button */}
+      {/* Mobile menu toggle */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -57,7 +59,7 @@ const Navbar = () => {
         </button>
       </div>
 
-      {/* Mobile menu overlay */}
+      {/* Mobile overlay */}
       {isMobileMenuOpen && (
         <div 
           className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
@@ -66,9 +68,11 @@ const Navbar = () => {
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
-        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      <div
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
+          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-center h-16 px-4 border-b border-gray-300">
@@ -81,7 +85,7 @@ const Navbar = () => {
             <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
           </div>
 
-          {/* Navigation */}
+          {/* Navigation links */}
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
               const Icon = item.icon;
@@ -123,10 +127,8 @@ const Navbar = () => {
         </div>
       </div>
 
-      {/* Main content offset for desktop */}
-      <div className="lg:ml-64">
-        {/* This div pushes content to the right on desktop */}
-      </div>
+      {/* Space for content on large screens */}
+      <div className="lg:ml-64"></div>
     </>
   );
 };

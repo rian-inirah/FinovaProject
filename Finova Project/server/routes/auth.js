@@ -1,12 +1,6 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { authenticateToken } = require('../middleware/auth');
-const { 
-  login, 
-  getProfile, 
-  verifyToken,
-  loginValidation 
-} = require('../controllers/authController');
+const authController = require('../controllers/authController');
 
 const router = express.Router();
 
@@ -21,9 +15,21 @@ const loginLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// Routes
-router.post('/login', loginLimiter, loginValidation, login);
-router.get('/profile', authenticateToken, getProfile);
-router.get('/verify', authenticateToken, verifyToken);
+// POST login with rate limiting
+router.post('/login', loginLimiter, authController.login);
+
+// POST register (optional)
+router.post('/register', authController.register);
+
+// GET user profile (requires authentication middleware)
+router.get('/profile', authController.authenticate, async (req, res) => {
+  // For now, just return the decoded user info
+  res.json({ user: req.user });
+});
+
+// GET verify token (requires authentication middleware)
+router.get('/verify', authController.authenticate, async (req, res) => {
+  res.json({ valid: true, user: req.user });
+});
 
 module.exports = router;

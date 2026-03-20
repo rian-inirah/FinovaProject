@@ -1,11 +1,8 @@
 const express = require('express');
-const { body } = require('express-validator');
 const { authenticateToken } = require('../middleware/auth');
 const {
   generateBillPreview,
   generateBillPDFFile,
-  shareBillViaEmail,
-  getWhatsAppShareLink,
   printBill
 } = require('../controllers/billingController');
 
@@ -14,18 +11,13 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticateToken);
 
-// Email validation
-const emailValidation = [
-  body('email')
-    .isEmail()
-    .withMessage('Valid email address is required')
-];
-
-// Routes
+// ✅ Preview bill (HTML preview for frontend)
 router.get('/:id/preview', generateBillPreview);
+
+// ✅ Generate and download bill PDF
 router.get('/:id/pdf', generateBillPDFFile);
-router.post('/:id/email', emailValidation, shareBillViaEmail);
-router.get('/:id/whatsapp', getWhatsAppShareLink);
+
+// ✅ Mark bill as printed
 router.post('/:id/print', printBill);
 
 module.exports = router;

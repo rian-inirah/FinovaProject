@@ -1,39 +1,101 @@
+// controllers/billingController.js
 const db = require('../models');
-const { generateBillPDF, generateBillHTML } = require('../utils/pdfGenerator');
-const nodemailer = require('nodemailer');
+const { jsPDF } = require('jspdf'); // lightweight PDF generator (if installed)
+const fs = require('fs');
 const path = require('path');
 
-// Email transporter setup
-const createEmailTransporter = () => {
-  return nodemailer.createTransporter({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
-};
-
-const generateBillPreview = async (req, res) => {
+//
+// 🔹 Generate Bill Preview (HTML for frontend)
+//
+exports.generateBillPreview = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get order with items
     const order = await db.Order.findOne({
-      where: {
-        id: id,
-        userId: req.user.id
-      },
+      where: { id, userId: req.user.id },
       include: [{
         model: db.OrderItem,
         as: 'orderItems',
-        include: [{
-          model: db.Item,
-          as: 'item',
-          attributes: ['id', 'name', 'price']
-        }]
+        include: [{ model: db.Item, as: 'item', attributes: ['id', 'name', 'price'] }]
+      }]
+    });
+
+    if (!order) {
+      return res.status(404).send('<h2>Order not found</h2>');
+    }
+
+    // Create a simple HTML preview
+    let html = `
+      <html>
+        <head>
+          <title>Bill Preview - ${order.orderNumber}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            th { background: #f0f0f0; }
+          </style>
+        </head>
+        <body>
+          <h1>Bill Preview</h1>
+          <p><strong>Order No:</strong> ${order.orderNumber}</p>
+          <p><strong>Status:</strong> ${order.status}</p>
+          <p><strong>Payment:</strong> ${order.paymentMethod || 'N/A'}</p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Quantity</th>
+                <th>Unit Price (₹)</th>
+                <th>Total (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+    `;
+
+    order.orderItems.forEach(item => {
+      html += `
+        <tr>
+          <td>${item.item.name}</td>
+          <td>${item.quantity}</td>
+          <td>${item.unitPrice}</td>
+          <td>${item.totalPrice}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+            </tbody>
+          </table>
+
+          <h3>Subtotal: ₹${order.subtotal}</h3>
+          <h3>GST: ₹${order.gstAmount} (CGST ₹${order.cgst} + SGST ₹${order.sgst})</h3>
+          <h2>Grand Total: ₹${order.grandTotal}</h2>
+        </body>
+      </html>
+    `;
+
+    res.status(200).send(html);
+  } catch (error) {
+    console.error('Error generating bill preview:', error);
+    res.status(500).send('<h3>Failed to generate bill preview</h3>');
+  }
+};
+
+//
+// 🔹 Generate Bill PDF (for download)
+//
+exports.generateBillPDFFile = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const order = await db.Order.findOne({
+      where: { id, userId: req.user.id },
+      include: [{
+        model: db.OrderItem,
+        as: 'orderItems',
+        include: [{ model: db.Item, as: 'item', attributes: ['id', 'name', 'price'] }]
       }]
     });
 
@@ -41,253 +103,57 @@ const generateBillPreview = async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Get business details
-    const businessDetails = await db.BusinessDetails.findOne({
-      where: { userId: req.user.id }
+    // Generate a PDF using jsPDF (text only for simplicity)
+    const doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.text(`Invoice - ${order.orderNumber}`, 10, 10);
+    doc.text(`Customer Phone: ${order.customerPhone || 'N/A'}`, 10, 20);
+    doc.text(`Payment: ${order.paymentMethod || 'N/A'}`, 10, 30);
+    doc.text(`----------------------------------------`, 10, 40);
+
+    let y = 50;
+    order.orderItems.forEach(item => {
+      doc.text(`${item.item.name} x${item.quantity}  ₹${item.totalPrice}`, 10, y);
+      y += 10;
     });
 
-    // Generate HTML content
-    const htmlContent = generateBillHTML(order, businessDetails);
+    y += 10;
+    doc.text(`Subtotal: ₹${order.subtotal}`, 10, y); y += 10;
+    doc.text(`GST: ₹${order.gstAmount}`, 10, y); y += 10;
+    doc.text(`Grand Total: ₹${order.grandTotal}`, 10, y);
 
-    res.json({
-      message: 'Bill preview generated successfully',
-      html: htmlContent,
-      order: order
+    // Save to temp folder
+    const filePath = path.join(__dirname, `../../bills/bill_${order.orderNumber}.pdf`);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    doc.save(filePath);
+
+    // Send file
+    res.download(filePath, `Bill_${order.orderNumber}.pdf`, (err) => {
+      if (err) console.error('Error sending PDF:', err);
+      fs.unlink(filePath, () => {}); // delete temp file
     });
 
   } catch (error) {
-    console.error('Generate bill preview error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Error generating bill PDF:', error);
+    res.status(500).json({ error: 'Failed to generate PDF' });
   }
 };
 
-const generateBillPDFFile = async (req, res) => {
+//
+// 🔹 Mark Bill as Printed
+//
+exports.printBill = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get order with items
-    const order = await db.Order.findOne({
-      where: {
-        id: id,
-        userId: req.user.id
-      },
-      include: [{
-        model: db.OrderItem,
-        as: 'orderItems',
-        include: [{
-          model: db.Item,
-          as: 'item',
-          attributes: ['id', 'name', 'price']
-        }]
-      }]
-    });
+    const order = await db.Order.findOne({ where: { id, userId: req.user.id, status: 'completed' } });
+    if (!order) return res.status(404).json({ error: 'Completed order not found' });
 
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
+    await order.update({ printed: true, printedAt: new Date() });
 
-    // Get business details
-    const businessDetails = await db.BusinessDetails.findOne({
-      where: { userId: req.user.id }
-    });
-
-    // Generate PDF
-    const { generateBillPDF } = require('../utils/pdfGenerator');
-    const pdfBuffer = await generateBillPDF(order, businessDetails);
-
-    // Set response headers
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="bill-${order.orderNumber}.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-
-    res.send(pdfBuffer);
-
+    res.json({ message: `Bill marked as printed for order ${order.orderNumber}` });
   } catch (error) {
-    console.error('Generate bill PDF error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Error marking bill printed:', error);
+    res.status(500).json({ error: 'Failed to mark bill as printed' });
   }
-};
-
-const shareBillViaEmail = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { email } = req.body;
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ error: 'Valid email address is required' });
-    }
-
-    // Get order with items
-    const order = await db.Order.findOne({
-      where: {
-        id: id,
-        userId: req.user.id
-      },
-      include: [{
-        model: db.OrderItem,
-        as: 'orderItems',
-        include: [{
-          model: db.Item,
-          as: 'item',
-          attributes: ['id', 'name', 'price']
-        }]
-      }]
-    });
-
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    // Get business details
-    const businessDetails = await db.BusinessDetails.findOne({
-      where: { userId: req.user.id }
-    });
-
-    // Generate PDF
-    const { generateBillPDF } = require('../utils/pdfGenerator');
-    const pdfBuffer = await generateBillPDF(order, businessDetails);
-
-    // Setup email transporter
-    const transporter = createEmailTransporter();
-
-    // Email options
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: `Bill - ${order.orderNumber} from ${businessDetails?.businessName || 'Finova'}`,
-      text: `Please find attached the bill for order ${order.orderNumber}.`,
-      attachments: [
-        {
-          filename: `bill-${order.orderNumber}.pdf`,
-          content: pdfBuffer,
-          contentType: 'application/pdf'
-        }
-      ]
-    };
-
-    // Send email
-    await transporter.sendMail(mailOptions);
-
-    res.json({
-      message: 'Bill sent via email successfully'
-    });
-
-  } catch (error) {
-    console.error('Share bill via email error:', error);
-    res.status(500).json({ error: 'Failed to send email. Please check email configuration.' });
-  }
-};
-
-const getWhatsAppShareLink = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Get order
-    const order = await db.Order.findOne({
-      where: {
-        id: id,
-        userId: req.user.id
-      }
-    });
-
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    // Get business details
-    const businessDetails = await db.BusinessDetails.findOne({
-      where: { userId: req.user.id }
-    });
-
-    // Create a simple text message for WhatsApp
-    const message = `Bill Details:
-Order #: ${order.orderNumber}
-Date: ${new Date(order.createdAt).toLocaleDateString()}
-Total: ₹${order.grandTotal.toFixed(2)}
-Payment: ${order.paymentMethod === 'cash' ? 'Cash' : 'Online'}
-
-${businessDetails?.businessName || 'Finova'}
-${businessDetails?.phoneNumber || ''}
-
-Thank you for your business!`;
-
-    // Encode message for URL
-    const encodedMessage = encodeURIComponent(message);
-
-    // Create WhatsApp share link
-    const whatsappLink = `https://wa.me/?text=${encodedMessage}`;
-
-    res.json({
-      message: 'WhatsApp share link generated successfully',
-      whatsappLink: whatsappLink
-    });
-
-  } catch (error) {
-    console.error('Get WhatsApp share link error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-const printBill = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Get order
-    const order = await db.Order.findOne({
-      where: {
-        id: id,
-        userId: req.user.id,
-        status: 'completed'
-      }
-    });
-
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found or not completed' });
-    }
-
-    // Mark as printed
-    await order.update({
-      printed: true,
-      printedAt: new Date()
-    });
-
-    // Get business details
-    const businessDetails = await db.BusinessDetails.findOne({
-      where: { userId: req.user.id }
-    });
-
-    // Get order with items for preview
-    const completeOrder = await db.Order.findByPk(order.id, {
-      include: [{
-        model: db.OrderItem,
-        as: 'orderItems',
-        include: [{
-          model: db.Item,
-          as: 'item',
-          attributes: ['id', 'name', 'price']
-        }]
-      }]
-    });
-
-    // Generate HTML content for printing
-    const htmlContent = generateBillHTML(completeOrder, businessDetails);
-
-    res.json({
-      message: 'Bill printed successfully',
-      html: htmlContent,
-      order: completeOrder
-    });
-
-  } catch (error) {
-    console.error('Print bill error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-module.exports = {
-  generateBillPreview,
-  generateBillPDFFile,
-  shareBillViaEmail,
-  getWhatsAppShareLink,
-  printBill
 };

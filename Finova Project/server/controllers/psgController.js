@@ -2,18 +2,14 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const moment = require('moment');
 
+// Get PSG reports aggregated by items
 const getPSGReports = async (req, res) => {
   try {
-    const { 
-      fromDateTime, 
-      toDateTime 
-    } = req.query;
+    const { fromDateTime, toDateTime } = req.query;
 
-    // Parse datetime strings
     const from = fromDateTime ? moment(fromDateTime) : moment().startOf('day');
     const to = toDateTime ? moment(toDateTime) : moment().endOf('day');
 
-    // Find all orders marked for PSG in the time range
     const psgOrders = await db.Order.findAll({
       where: {
         userId: req.user.id,
@@ -35,28 +31,27 @@ const getPSGReports = async (req, res) => {
       order: [['createdAt', 'ASC']]
     });
 
-    // Aggregate items across all PSG orders
     const itemAggregation = {};
     let totalOrders = psgOrders.length;
     let totalAmount = 0;
 
     psgOrders.forEach(order => {
       totalAmount += parseFloat(order.grandTotal);
-      
+
       order.orderItems.forEach(orderItem => {
         const itemId = orderItem.item.id;
         const itemName = orderItem.item.name;
-        
+
         if (!itemAggregation[itemId]) {
           itemAggregation[itemId] = {
-            itemId: itemId,
-            itemName: itemName,
+            itemId,
+            itemName,
             totalQuantity: 0,
             totalAmount: 0,
             orders: []
           };
         }
-        
+
         itemAggregation[itemId].totalQuantity += orderItem.quantity;
         itemAggregation[itemId].totalAmount += parseFloat(orderItem.totalPrice);
         itemAggregation[itemId].orders.push({
@@ -69,20 +64,16 @@ const getPSGReports = async (req, res) => {
       });
     });
 
-    // Convert to array and sort by quantity
-    const psgItems = Object.values(itemAggregation)
-      .sort((a, b) => b.totalQuantity - a.totalQuantity);
-
-    // Calculate summary
+    const psgItems = Object.values(itemAggregation).sort((a, b) => b.totalQuantity - a.totalQuantity);
     const totalItems = psgItems.length;
     const totalQuantity = psgItems.reduce((sum, item) => sum + item.totalQuantity, 0);
 
     res.json({
-      psgItems: psgItems,
+      psgItems,
       summary: {
-        totalOrders: totalOrders,
-        totalItems: totalItems,
-        totalQuantity: totalQuantity,
+        totalOrders,
+        totalItems,
+        totalQuantity,
         totalAmount: parseFloat(totalAmount.toFixed(2))
       },
       dateRange: {
@@ -97,16 +88,11 @@ const getPSGReports = async (req, res) => {
   }
 };
 
+// Get paginated PSG order history
 const getPSGOrderHistory = async (req, res) => {
   try {
-    const { 
-      fromDateTime, 
-      toDateTime,
-      page = 1,
-      limit = 20
-    } = req.query;
+    const { fromDateTime, toDateTime, page = 1, limit = 20 } = req.query;
 
-    // Parse datetime strings
     const from = fromDateTime ? moment(fromDateTime) : moment().startOf('day');
     const to = toDateTime ? moment(toDateTime) : moment().endOf('day');
 
@@ -156,19 +142,15 @@ const getPSGOrderHistory = async (req, res) => {
   }
 };
 
+// Get detailed information for a specific PSG item
 const getPSGItemDetails = async (req, res) => {
   try {
     const { itemId } = req.params;
-    const { 
-      fromDateTime, 
-      toDateTime 
-    } = req.query;
+    const { fromDateTime, toDateTime } = req.query;
 
-    // Parse datetime strings
     const from = fromDateTime ? moment(fromDateTime) : moment().startOf('day');
     const to = toDateTime ? moment(toDateTime) : moment().endOf('day');
 
-    // Find the item
     const item = await db.Item.findOne({
       where: {
         id: itemId,
@@ -182,7 +164,6 @@ const getPSGItemDetails = async (req, res) => {
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    // Find all PSG orders containing this item
     const psgOrders = await db.Order.findAll({
       where: {
         userId: req.user.id,
@@ -190,11 +171,12 @@ const getPSGItemDetails = async (req, res) => {
         psgMarked: true,
         createdAt: {
           [Op.between]: [from.toDate(), to.toDate()]
+        }
       },
       include: [{
         model: db.OrderItem,
         as: 'orderItems',
-        where: { itemId: itemId },
+        where: { itemId },
         include: [{
           model: db.Item,
           as: 'item',
@@ -204,7 +186,6 @@ const getPSGItemDetails = async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
-    // Calculate item statistics
     let totalQuantity = 0;
     let totalAmount = 0;
     const orderDetails = [];
@@ -214,7 +195,7 @@ const getPSGItemDetails = async (req, res) => {
       if (orderItem) {
         totalQuantity += orderItem.quantity;
         totalAmount += parseFloat(orderItem.totalPrice);
-        
+
         orderDetails.push({
           orderId: order.id,
           orderNumber: order.orderNumber,
@@ -228,14 +209,14 @@ const getPSGItemDetails = async (req, res) => {
     });
 
     res.json({
-      item: item,
+      item,
       statistics: {
-        totalQuantity: totalQuantity,
+        totalQuantity,
         totalAmount: parseFloat(totalAmount.toFixed(2)),
         averageQuantity: psgOrders.length > 0 ? (totalQuantity / psgOrders.length).toFixed(2) : 0,
         orderCount: psgOrders.length
       },
-      orderDetails: orderDetails,
+      orderDetails,
       dateRange: {
         from: from.format('YYYY-MM-DD HH:mm'),
         to: to.format('YYYY-MM-DD HH:mm')

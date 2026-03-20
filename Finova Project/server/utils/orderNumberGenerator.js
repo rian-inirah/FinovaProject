@@ -6,7 +6,6 @@ const generateOrderNumber = async () => {
   const prefix = `FN-${today}-`;
   
   try {
-    // Find the highest order number for today
     const lastOrder = await db.Order.findOne({
       where: {
         orderNumber: {
@@ -23,18 +22,12 @@ const generateOrderNumber = async () => {
       sequence = lastSequence + 1;
     }
 
-    // Ensure 6-digit sequence with leading zeros
-    const orderNumber = `${prefix}${sequence.toString().padStart(6, '0')}`;
-    
-    return orderNumber;
+    return `${prefix}${sequence.toString().padStart(6, '0')}`;
   } catch (error) {
     console.error('Error generating order number:', error);
-    // Fallback to timestamp-based number
     const timestamp = Date.now().toString().slice(-6);
     return `${prefix}${timestamp}`;
   }
 };
 
-module.exports = {
-  generateOrderNumber
-};
+module.exports = { generateOrderNumber };

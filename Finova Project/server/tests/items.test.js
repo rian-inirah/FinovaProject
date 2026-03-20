@@ -1,33 +1,32 @@
 const request = require('supertest');
 const app = require('../server');
 const db = require('../models');
-const bcrypt = require('bcryptjs');
 
 describe('Items Management', () => {
   let token;
   let testUser;
 
   beforeAll(async () => {
-    // Setup test database
-    await db.sequelize.sync({ force: true });
-    
-    // Create test user
-    const hashedPassword = await bcrypt.hash('testpassword', 10);
-    testUser = await db.User.create({
-      username: 'testuser',
-      password: hashedPassword,
-      role: 'operator',
-      isActive: true
-    });
+    // Don't force sync in production-like environment
+    // await db.sequelize.sync({ force: true }); // Only use this if you want a fresh DB
 
-    // Get authentication token
+    // Fetch an existing user
+    testUser = await db.User.findOne({ where: { username: 'realuser' } });
+
+    if (!testUser) {
+      throw new Error(
+        "User 'realuser' not found in database. Please create it with a hashed password and role 'operator'."
+      );
+    }
+
+    // Login to get token
     const loginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        username: 'testuser',
-        password: 'testpassword'
+        username: testUser.username,
+        password: 'userpassword', // plain password matching hashed password in DB
       });
-    
+
     token = loginResponse.body.token;
   });
 
@@ -42,7 +41,7 @@ describe('Items Management', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({
           name: 'Test Item',
-          price: 25.50
+          price: 25.5,
         });
 
       expect(response.status).toBe(201);
@@ -57,7 +56,7 @@ describe('Items Management', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({
           name: '',
-          price: -10
+          price: -10,
         });
 
       expect(response.status).toBe(400);
@@ -69,7 +68,7 @@ describe('Items Management', () => {
         .post('/api/items')
         .send({
           name: 'Test Item',
-          price: 25.50
+          price: 25.5,
         });
 
       expect(response.status).toBe(401);
@@ -78,31 +77,14 @@ describe('Items Management', () => {
 
   describe('GET /api/items', () => {
     beforeEach(async () => {
-      // Create test items
       await db.Item.bulkCreate([
-        {
-          userId: testUser.id,
-          name: 'Item 1',
-          price: 10.00,
-          isActive: true
-        },
-        {
-          userId: testUser.id,
-          name: 'Item 2',
-          price: 20.00,
-          isActive: true
-        },
-        {
-          userId: testUser.id,
-          name: 'Special Item',
-          price: 30.00,
-          isActive: true
-        }
+        { userId: testUser.id, name: 'Item 1', price: 10.0, isActive: true },
+        { userId: testUser.id, name: 'Item 2', price: 20.0, isActive: true },
+        { userId: testUser.id, name: 'Special Item', price: 30.0, isActive: true },
       ]);
     });
 
     afterEach(async () => {
-      // Clean up test items
       await db.Item.destroy({ where: { userId: testUser.id } });
     });
 
@@ -134,8 +116,8 @@ describe('Items Management', () => {
       testItem = await db.Item.create({
         userId: testUser.id,
         name: 'Original Item',
-        price: 15.00,
-        isActive: true
+        price: 15.0,
+        isActive: true,
       });
     });
 
@@ -149,7 +131,7 @@ describe('Items Management', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({
           name: 'Updated Item',
-          price: 25.00
+          price: 25.0,
         });
 
       expect(response.status).toBe(200);
@@ -163,7 +145,7 @@ describe('Items Management', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({
           name: 'Updated Item',
-          price: 25.00
+          price: 25.0,
         });
 
       expect(response.status).toBe(404);
@@ -177,8 +159,8 @@ describe('Items Management', () => {
       testItem = await db.Item.create({
         userId: testUser.id,
         name: 'Item to Delete',
-        price: 15.00,
-        isActive: true
+        price: 15.0,
+        isActive: true,
       });
     });
 
@@ -186,14 +168,11 @@ describe('Items Management', () => {
       const response = await request(app)
         .delete(`/api/items/${testItem.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .send({
-          confirm: true
-        });
+        .send({ confirm: true });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('message');
 
-      // Verify item is soft deleted
       const deletedItem = await db.Item.findByPk(testItem.id);
       expect(deletedItem.isActive).toBe(false);
     });
@@ -202,9 +181,7 @@ describe('Items Management', () => {
       const response = await request(app)
         .delete(`/api/items/${testItem.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .send({
-          confirm: false
-        });
+        .send({ confirm: false });
 
       expect(response.status).toBe(400);
     });

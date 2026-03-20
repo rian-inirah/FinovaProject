@@ -59,9 +59,23 @@ A complete Point of Sale (POS) billing system built with React, Node.js, Express
 
 Before running the application, make sure you have the following installed:
 
-- **Node.js** (v16 or higher)
+- **Node.js** (v20.x)
 - **MySQL** (v8.0 or higher)
 - **npm** or **yarn**
+
+## ⚙️ Automated Setup
+
+The project includes an automated setup script to help you get started quickly:
+
+```bash
+node setup.js
+```
+
+This script will:
+- Check for Node.js and MySQL installation
+- Create necessary directories (uploads)
+- Verify environment configuration
+- Provide next steps for manual setup
 
 ## 🚀 Quick Start
 
