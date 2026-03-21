@@ -1,11 +1,11 @@
-// server.js (safer require + stub routes)
+// server.js
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
 const dotenv = require('dotenv');
 
-// Load environment variables
 dotenv.config();
 
 // Import database
@@ -14,29 +14,59 @@ const db = require('./models');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// -----------------
 // Security middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
+// -----------------
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+  })
+);
 
+// -----------------
 // CORS configuration
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? ['https://yourdomain.com']
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// -----------------
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'https://legendary-lily-29b929.netlify.app'
+];
 
-// Body parsing middleware
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  })
+);
+
+// Handle preflight requests
+app.options('*', cors());
+
+// -----------------
+// Body parsing
+// -----------------
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve static files (uploads)
+// -----------------
+// Static files
+// -----------------
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Health check endpoint
+// -----------------
+// Health check
+// -----------------
 app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
@@ -45,44 +75,40 @@ app.get('/health', (req, res) => {
   });
 });
 
-/**
- * Safe route loader
- * - tries to require the route module.
- * - if successful and it exports a router (function or Router), mounts it on the given path.
- * - if it fails, mounts a stub router that returns 501 and logs the original error.
- */
+// -----------------
+// Safe route loader
+// -----------------
 function requireRouteSafe(routePath, mountPath) {
   try {
     const required = require(routePath);
 
-    // If module exports the router directly (function or object), mount it.
     if (typeof required === 'function' || (required && typeof required === 'object')) {
       app.use(mountPath, required);
       console.log(`✅ Mounted ${routePath} at ${mountPath}`);
       return;
     }
 
-    // Fallback if exported something unexpected
-    console.error(`❌ ${routePath} does not export a valid router. Mounted stub at ${mountPath}.`);
+    console.error(`❌ ${routePath} did not export a valid router`);
   } catch (err) {
-    console.error(`❌ Failed to load route ${routePath} -> mounted stub at ${mountPath}.`);
-    console.error(err && err.stack ? err.stack : err);
+    console.error(`❌ Failed to load route ${routePath}`);
+    console.error(err);
   }
 
-  // Mount stub so server doesn't crash
+  // fallback stub
   const expressRouter = express.Router();
   expressRouter.use((req, res) => {
     res.status(501).json({
-      error: 'Route unavailable (stub). Check server logs for require/exports errors.',
+      error: 'Route unavailable (stub)',
       route: mountPath,
       loadedFrom: routePath
     });
   });
+
   app.use(mountPath, expressRouter);
 }
 
 // -----------------
-// Mount routes (safe)
+// Mount routes
 // -----------------
 requireRouteSafe('./routes/auth', '/api/auth');
 requireRouteSafe('./routes/business', '/api/business');
@@ -92,7 +118,9 @@ requireRouteSafe('./routes/billing', '/api/billing');
 requireRouteSafe('./routes/reports', '/api/reports');
 requireRouteSafe('./routes/psg', '/api/psg');
 
-// 404 handler (only for routes that didn't match; API clients get JSON)
+// -----------------
+// 404 handler
+// -----------------
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Route not found',
@@ -100,7 +128,9 @@ app.use('*', (req, res) => {
   });
 });
 
+// -----------------
 // Global error handler
+// -----------------
 app.use((error, req, res, next) => {
   console.error('Global error handler:', error);
 
@@ -112,46 +142,43 @@ app.use((error, req, res, next) => {
   });
 });
 
-// Database connection and server start
+// -----------------
+// Start server
+// -----------------
 const startServer = async () => {
   try {
-    // Test database connection
     await db.sequelize.authenticate();
-    console.log('✅ Database connection established successfully');
+    console.log('✅ Database connected');
 
-    // Sync database models (in development)
     if (process.env.NODE_ENV === 'development') {
       await db.sequelize.sync({ alter: true });
-      console.log('✅ Database models synchronized');
+      console.log('✅ DB synced');
     }
 
-    // Start server
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+      console.log(`🔗 Health: http://localhost:${PORT}/health`);
     });
 
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    console.error('❌ Server failed to start:', error);
     process.exit(1);
   }
 };
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('🔄 SIGTERM received, shutting down gracefully');
+  console.log('SIGTERM received');
   await db.sequelize.close();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  console.log('🔄 SIGINT received, shutting down gracefully');
+  console.log('SIGINT received');
   await db.sequelize.close();
   process.exit(0);
 });
 
-// Start the server
 startServer();
 
 module.exports = app;
