@@ -24,32 +24,22 @@ app.use(
 );
 
 // -----------------
-// CORS configuration
+// CORS configuration (FIXED)
 // -----------------
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'https://legendary-lily-29b929.netlify.app'
-];
-
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        return callback(null, true); // allow but you can strict it if needed
-      }
-    },
+    origin: [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'https://legendary-lily-29b929.netlify.app'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
   })
 );
 
-// Handle preflight
+// ✅ Handle preflight requests properly
 app.options('*', cors());
 
 // -----------------
@@ -75,7 +65,7 @@ app.get('/health', (req, res) => {
 });
 
 // -----------------
-// Routes (DIRECT MOUNTING - FIXED)
+// Routes
 // -----------------
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/business', require('./routes/business'));
