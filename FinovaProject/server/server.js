@@ -35,13 +35,12 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
-      // allow requests with no origin (mobile apps, curl, etc.)
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       } else {
-        return callback(new Error('Not allowed by CORS'));
+        return callback(null, true); // allow but you can strict it if needed
       }
     },
     credentials: true,
@@ -50,7 +49,7 @@ app.use(
   })
 );
 
-// Handle preflight requests
+// Handle preflight
 app.options('*', cors());
 
 // -----------------
@@ -76,47 +75,15 @@ app.get('/health', (req, res) => {
 });
 
 // -----------------
-// Safe route loader
+// Routes (DIRECT MOUNTING - FIXED)
 // -----------------
-function requireRouteSafe(routePath, mountPath) {
-  try {
-    const required = require(routePath);
-
-    if (typeof required === 'function' || (required && typeof required === 'object')) {
-      app.use(mountPath, required);
-      console.log(`✅ Mounted ${routePath} at ${mountPath}`);
-      return;
-    }
-
-    console.error(`❌ ${routePath} did not export a valid router`);
-  } catch (err) {
-    console.error(`❌ Failed to load route ${routePath}`);
-    console.error(err);
-  }
-
-  // fallback stub
-  const expressRouter = express.Router();
-  expressRouter.use((req, res) => {
-    res.status(501).json({
-      error: 'Route unavailable (stub)',
-      route: mountPath,
-      loadedFrom: routePath
-    });
-  });
-
-  app.use(mountPath, expressRouter);
-}
-
-// -----------------
-// Mount routes
-// -----------------
-requireRouteSafe('./routes/auth', '/api/auth');
-requireRouteSafe('./routes/business', '/api/business');
-requireRouteSafe('./routes/items', '/api/items');
-requireRouteSafe('./routes/orders', '/api/orders');
-requireRouteSafe('./routes/billing', '/api/billing');
-requireRouteSafe('./routes/reports', '/api/reports');
-requireRouteSafe('./routes/psg', '/api/psg');
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/business', require('./routes/business'));
+app.use('/api/items', require('./routes/items'));
+app.use('/api/orders', require('./routes/orders'));
+app.use('/api/billing', require('./routes/billing'));
+app.use('/api/reports', require('./routes/reports'));
+app.use('/api/psg', require('./routes/psg'));
 
 // -----------------
 // 404 handler
